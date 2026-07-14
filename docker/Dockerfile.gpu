@@ -1,0 +1,29 @@
+# GPU training image. CUDA 12.4 + cuDNN 9 — matches the A100 pools in both clouds and the
+# local GTX-class dev boxes. PyTorch and TensorFlow share the same CUDA runtime here.
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    TORCH_CUDNN_V8_API_ENABLED=1 \
+    TF_FORCE_GPU_ALLOW_GROWTH=true \
+    TF_ENABLE_ONEDNN_OPTS=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.11 python3-pip openjdk-17-jre-headless git && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY requirements/base.txt requirements/gpu.txt /tmp/
+RUN pip3 install --no-cache-dir -r /tmp/base.txt -r /tmp/gpu.txt
+
+COPY src ./src
+COPY conf ./conf
+COPY pyproject.toml ./
+RUN pip3 install --no-cache-dir -e .
+
+# Sanity check at build time: a broken CUDA image should fail here, not at 3am in a training job.
+RUN python3 -c "import torch, tensorflow as tf; print('torch', torch.__version__, 'cuda_built', torch.version.cuda); print('tf', tf.__version__)"
+
+ENTRYPOINT ["python3", "-m"]

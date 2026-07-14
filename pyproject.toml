@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gaming-lakehouse"
+version = "1.0.0"
+description = "Multi-cloud (GCP | Azure) medallion + event-driven lakehouse for PlayStation/Xbox commerce analytics"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Data Platform Team" }]
+
+[project.scripts]
+# Entry points referenced by the Databricks Asset Bundle python_wheel_task.
+ingest           = "gaming_lakehouse.ingestion.run_ingest:main"
+bronze_stream    = "gaming_lakehouse.streaming.bronze_stream:main"
+cdc_merge        = "gaming_lakehouse.cdc.cdc_merge_silver:main"
+bronze_to_silver = "gaming_lakehouse.transform.bronze_to_silver:main"
+silver_to_gold   = "gaming_lakehouse.transform.silver_to_gold:main"
+maintenance      = "gaming_lakehouse.transform.optimize_maintenance:main"
+features         = "gaming_lakehouse.ml.features:materialize"
+train_torch      = "gaming_lakehouse.ml.train_torch_recsys:main"
+train_tf         = "gaming_lakehouse.ml.train_tf_forecast:main"
+batch_inference  = "gaming_lakehouse.ml.serving.batch_inference:main"
+publish_marts    = "gaming_lakehouse.delivery.publish_marts:main"
+genai_enrich     = "gaming_lakehouse.genai.catalog_insights:enrich_catalog"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+gaming_lakehouse = ["../../conf/**/*.yaml"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF", "S"]
+# N812/N817: `functions as F`, `DistributedDataParallel as DDP` are the PySpark/PyTorch
+# ecosystem conventions - renaming them would hurt readability for every reviewer.
+# S101: pytest needs bare asserts. E501: line length is already enforced by `line-length`.
+ignore = ["S101", "E501", "N812", "N817"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "N"]
+"orchestration/*" = ["E402"]                                    # Airflow DAGs import after sys.path setup
+"src/gaming_lakehouse/streaming/producer_simulator.py" = ["S311"]  # synthetic events, not crypto
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+plugins = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "gpu: requires a CUDA device",
+    "smoke: post-deployment smoke test",
+    "integration: needs the docker-compose CDC stack",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.coverage.run]
+source = ["src/gaming_lakehouse"]
+omit = ["*/serving_api.py", "*/producer_simulator.py"]

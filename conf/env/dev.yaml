@@ -1,0 +1,21 @@
+environment: dev
+spark:
+  shuffle_partitions: 64
+  max_executors: 4
+quality:
+  on_violation: warn
+ml:
+  torch:
+    max_epochs: 2
+    ddp: false
+  tensorflow:
+    max_epochs: 2
+streaming:
+  enabled: true
+  trigger_interval: "1 minute"
+retention:
+  vacuum_hours: 168
+cost:
+  spot_instances: true
+  autoscale_min: 1
+  autoscale_max: 4

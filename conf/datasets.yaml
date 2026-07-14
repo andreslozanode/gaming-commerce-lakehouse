@@ -1,0 +1,71 @@
+# Kaggle sources. Slugs are consumed by the Kaggle API client (kaggle.api.dataset_download_files).
+# Every entry lands in <landing>/kaggle/<key>/ingest_date=YYYY-MM-DD/ and is registered in bronze.
+datasets:
+  vgchartz_sales_classic:
+    slug: gregorut/videogamesales
+    description: >
+      VGChartz sales for 16.5k+ titles (1980-2016). Backbone of the physical-copy analysis
+      for the 90s/00s/10s eras across PlayStation and Xbox generations.
+    grain: game_platform
+    bronze_table: bronze_vgchartz_sales
+    era_coverage: ["90s", "00s", "10s"]
+
+  vgchartz_sales_extended:
+    slug: patkle/video-game-sales-data-from-vgchartzcom
+    description: 60k+ titles with platform, shipped units, regional sales and critic scores.
+    grain: game_platform
+    bronze_table: bronze_vgchartz_extended
+    era_coverage: ["90s", "00s", "10s", "20s"]
+
+  vgchartz_with_ratings:
+    slug: rush4ratio/video-game-sales-with-ratings
+    description: VGChartz sales joined with Metacritic critic/user scores, ESRB rating and counts.
+    grain: game_platform
+    bronze_table: bronze_vgchartz_ratings
+    era_coverage: ["90s", "00s", "10s"]
+
+  gaming_profiles:
+    slug: artyomkruglov/gaming-profiles-2025-steam-playstation-xbox
+    description: >
+      Player profiles, owned/purchased titles, prices and achievements across Steam,
+      PlayStation and Xbox. Primary source for DIGITAL purchases and user-level behaviour.
+    grain: player_game
+    bronze_table: bronze_gaming_profiles
+    era_coverage: ["10s", "20s"]
+
+  xbox_game_pass:
+    slug: deepcontractor/xbox-game-pass-games-library
+    description: Full Xbox Game Pass catalog — the MEMBERSHIP entitlement dimension.
+    grain: game
+    bronze_table: bronze_xbox_game_pass
+    era_coverage: ["10s", "20s"]
+
+  playstation_catalog_ps4:
+    slug: shivamb/all-playstation-4-games
+    description: ~10k PlayStation 4 titles with genre, publisher, release date and store metadata.
+    grain: game
+    bronze_table: bronze_ps_catalog
+    era_coverage: ["10s"]
+
+  playstation_catalog_ps5:
+    slug: kanchana1990/ps5-game-data-2000-titles-explored
+    description: ~2k PS5 titles for current-gen catalog continuity.
+    grain: game
+    bronze_table: bronze_ps5_catalog
+    era_coverage: ["20s"]
+
+# Synthetic-but-realistic operational sources (OLTP) that feed CDC + event streams.
+oltp:
+  postgres:
+    tables:
+      - public.orders               # physical + digital purchases, console hardware
+      - public.order_items
+      - public.subscriptions        # PS Plus / Game Pass memberships
+      - public.customers
+      - public.consoles             # hardware SKUs (PS1..PS5, Xbox..Series X|S)
+    cdc:
+      connector: debezium-postgres
+      plugin: pgoutput
+      publication: gc_pub
+      slot: gc_slot
+      snapshot_mode: initial

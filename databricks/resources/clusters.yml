@@ -1,0 +1,47 @@
+# Shared cluster shapes, expressed as complex variables.
+#
+# Why not YAML anchors: anchors do not cross include files, and
+# `resources.job_clusters` is not a bundle-level resource type. Complex
+# variables are the Asset Bundle idiom for one cluster spec used by many jobs:
+# jobs reference these as `new_cluster: ${var.batch_cluster}`.
+#
+# The specs are deliberately cloud-neutral (no gcp_attributes/azure_attributes):
+# spot/preemptible policy is enforced by workspace cluster policies provisioned
+# in Terraform, so the same bundle deploys unchanged to either cloud.
+variables:
+  batch_cluster:
+    description: Photon autoscaling shape for Bronze -> Silver -> Gold batch work
+    type: complex
+    default:
+      spark_version: 15.4.x-scala2.12
+      node_type_id: ${var.node_type}
+      data_security_mode: SINGLE_USER
+      runtime_engine: PHOTON            # vectorized engine, ~2-3x on the Silver/Gold scans
+      autoscale:
+        min_workers: 2
+        max_workers: 8
+      spark_conf:
+        spark.databricks.delta.optimizeWrite.enabled: "true"
+        spark.databricks.delta.autoCompact.enabled: "true"
+        spark.sql.adaptive.enabled: "true"
+        spark.sql.shuffle.partitions: "auto"
+      spark_env_vars:
+        CLOUD: ${var.cloud}
+        ENVIRONMENT: ${var.environment}
+
+  gpu_cluster:
+    description: Single-node A100 for PyTorch / TensorFlow training
+    type: complex
+    default:
+      spark_version: 15.4.x-gpu-ml-scala2.12
+      node_type_id: ${var.gpu_node_type}
+      num_workers: 0                    # single-node A100 - the two-tower model fits on one card
+      data_security_mode: SINGLE_USER
+      spark_env_vars:
+        CLOUD: ${var.cloud}
+        ENVIRONMENT: ${var.environment}
+        NCCL_DEBUG: WARN
+        TORCH_CUDNN_V8_API_ENABLED: "1"
+      init_scripts:
+        - workspace:
+            destination: /Shared/gaming_commerce/${var.environment}/init/gpu_init.sh

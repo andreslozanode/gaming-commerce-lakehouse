@@ -1,0 +1,59 @@
+resources:
+  jobs:
+    gc_bronze_purchase_events:
+      name: gc_bronze_purchase_events_${var.environment}
+      continuous:
+        pause_status: ${var.schedule_pause_status}
+      max_concurrent_runs: 1
+      tasks:
+        - task_key: stream
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: ${var.node_type}
+            num_workers: 2
+            runtime_engine: PHOTON
+            spark_conf:
+              spark.sql.streaming.stateStore.providerClass: com.databricks.sql.streaming.state.RocksDBStateStoreProvider
+              spark.databricks.delta.autoCompact.enabled: "true"
+            spark_env_vars:
+              CLOUD: ${var.cloud}
+              ENVIRONMENT: ${var.environment}
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: bronze_stream
+
+    gc_cdc_orders:
+      name: gc_cdc_orders_${var.environment}
+      continuous:
+        pause_status: ${var.schedule_pause_status}
+      tasks:
+        - task_key: cdc
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: ${var.node_type}
+            num_workers: 2
+            spark_env_vars:
+              CLOUD: ${var.cloud}
+              ENVIRONMENT: ${var.environment}
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: cdc_merge
+            parameters: ["--entity", "orders"]
+
+    gc_cdc_subscriptions:
+      name: gc_cdc_subscriptions_${var.environment}
+      continuous:
+        pause_status: ${var.schedule_pause_status}
+      tasks:
+        - task_key: cdc
+          new_cluster:
+            spark_version: 15.4.x-scala2.12
+            node_type_id: ${var.node_type}
+            num_workers: 1
+            spark_env_vars:
+              CLOUD: ${var.cloud}
+              ENVIRONMENT: ${var.environment}
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: cdc_merge
+            parameters: ["--entity", "subscriptions"]

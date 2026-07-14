@@ -1,0 +1,24 @@
+{
+  "type": "record",
+  "name": "PurchaseEvent",
+  "namespace": "com.gamingcommerce.events",
+  "fields": [
+    {"name": "event_id", "type": "string"},
+    {"name": "event_type", "type": {"type": "enum", "name": "EventType", "symbols": ["PURCHASE", "REFUND", "SUBSCRIPTION_RENEWAL", "CONSOLE_SALE"]}},
+    {"name": "occurred_at", "type": {"type": "long", "logicalType": "timestamp-micros"}},
+    {"name": "player_id", "type": "string"},
+    {"name": "platform", "type": "string"},
+    {"name": "channel_code", "type": "string"},
+    {"name": "product_id", "type": "string"},
+    {"name": "product_type", "type": "string"},
+    {"name": "title", "type": ["null", "string"], "default": null},
+    {"name": "quantity", "type": "int"},
+    {"name": "unit_price", "type": "double"},
+    {"name": "discount_pct", "type": ["null", "double"], "default": null},
+    {"name": "currency", "type": "string"},
+    {"name": "country", "type": ["null", "string"], "default": null},
+    {"name": "is_preowned", "type": ["null", "boolean"], "default": null},
+    {"name": "membership_tier", "type": ["null", "string"], "default": null},
+    {"name": "producer_version", "type": "string"}
+  ]
+}

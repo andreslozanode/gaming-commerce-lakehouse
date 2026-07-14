@@ -1,0 +1,22 @@
+# Batch/streaming job image (CPU). Multi-stage: build the wheel once, ship a slim runtime.
+FROM python:3.11-slim AS builder
+WORKDIR /build
+COPY pyproject.toml requirements/ ./
+COPY src ./src
+RUN pip install --no-cache-dir build && python -m build --wheel
+
+FROM python:3.11-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openjdk-17-jre-headless procps && rm -rf /var/lib/apt/lists/*
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+WORKDIR /app
+COPY --from=builder /build/dist/*.whl /tmp/
+COPY requirements/base.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/base.txt /tmp/*.whl && rm -rf /tmp/*
+COPY conf ./conf
+# Non-root: a job container never needs root.
+RUN useradd -m -u 10001 runner && chown -R runner /app
+USER runner
+ENTRYPOINT ["python", "-m"]

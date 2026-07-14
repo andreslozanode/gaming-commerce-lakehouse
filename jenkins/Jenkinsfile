@@ -1,0 +1,134 @@
+// Jenkins declarative pipeline — the same stages as GitHub Actions, for organisations that run
+// Jenkins as the system of record. Both are kept in sync; neither is a second-class citizen.
+//
+// Credentials expected (Jenkins credential IDs):
+//   gcp-wif-provider, gcp-pipeline-sa, azure-oidc-client-id, azure-tenant-id, azure-subscription-id
+//   databricks-host-gcp, databricks-token-gcp, databricks-host-azure, databricks-token-azure
+
+@Library('gc-shared-lib') _
+
+pipeline {
+  agent none
+
+  parameters {
+    choice(name: 'CLOUD', choices: ['gcp', 'azure', 'both'], description: 'Target cloud')
+    choice(name: 'ENVIRONMENT', choices: ['dev', 'qa', 'prod'], description: 'Target environment')
+    booleanParam(name: 'SKIP_TESTS', defaultValue: false)
+  }
+
+  options {
+    timestamps()
+    ansiColor('xterm')
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+    timeout(time: 90, unit: 'MINUTES')
+  }
+
+  environment {
+    PYTHON_VERSION = '3.11'
+    PIP_CACHE_DIR  = "${WORKSPACE}/.pip-cache"
+  }
+
+  stages {
+    stage('Checkout') {
+      agent { label 'linux && docker' }
+      steps {
+        checkout scm
+        script { env.GIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim() }
+      }
+    }
+
+    stage('Quality gates') {
+      agent { docker { label 'linux && docker'; image 'python:3.11-slim' } }
+      when { expression { !params.SKIP_TESTS } }
+      parallel {
+        stage('Lint')     { steps { sh 'pip install -q -r requirements/dev.txt && ruff check src tests && ruff format --check src' } }
+        stage('Types')    { steps { sh 'pip install -q -r requirements/dev.txt && mypy src/gaming_lakehouse --ignore-missing-imports' } }
+        stage('Security') { steps { sh 'pip install -q bandit pip-audit && bandit -r src -ll && pip-audit -r requirements/base.txt' } }
+        stage('IaC scan') { steps { sh 'pip install -q checkov && checkov -d infra/terraform --framework terraform' } }
+      }
+    }
+
+    stage('Unit tests') {
+      agent { docker { label 'linux && docker'; image 'python:3.11-slim' } }
+      when { expression { !params.SKIP_TESTS } }
+      steps {
+        sh '''
+          apt-get update -qq && apt-get install -y -qq openjdk-17-jre-headless
+          pip install -q -r requirements/dev.txt -e .
+          pytest tests/unit --junitxml=reports/junit.xml --cov=gaming_lakehouse --cov-report=xml --cov-fail-under=80
+        '''
+      }
+      post {
+        always {
+          junit 'reports/junit.xml'
+          recordCoverage(tools: [[parser: 'COBERTURA', pattern: 'coverage.xml']])
+        }
+      }
+    }
+
+    stage('Integration (CDC e2e)') {
+      agent { label 'linux && docker' }
+      when { expression { !params.SKIP_TESTS && params.ENVIRONMENT != 'prod' } }
+      steps {
+        sh 'docker compose -f src/gaming_lakehouse/cdc/debezium/docker-compose.yml up -d --wait'
+        sh 'pip install -q -r requirements/dev.txt -e . && pytest tests/integration -m "not gpu" -v'
+      }
+      post {
+        always { sh 'docker compose -f src/gaming_lakehouse/cdc/debezium/docker-compose.yml down -v || true' }
+      }
+    }
+
+    stage('Build wheel') {
+      agent { docker { label 'linux && docker'; image 'python:3.11-slim' } }
+      steps {
+        sh 'pip install -q build && python -m build --wheel'
+        archiveArtifacts artifacts: 'dist/*.whl', fingerprint: true
+      }
+    }
+
+    stage('Approval') {
+      when { expression { params.ENVIRONMENT == 'prod' } }
+      steps {
+        timeout(time: 24, unit: 'HOURS') {
+          input message: "Deploy ${env.GIT_SHA} to PRODUCTION (${params.CLOUD})?",
+                submitter: 'data-platform-leads', ok: 'Ship it'
+        }
+      }
+    }
+
+    stage('Deploy') {
+      agent { label 'linux && docker' }
+      steps {
+        script {
+          def clouds = params.CLOUD == 'both' ? ['gcp', 'azure'] : [params.CLOUD]
+          def deployments = [:]
+          clouds.each { cloud ->
+            deployments["deploy-${cloud}"] = {
+              gcCloudLogin(cloud)                                        // vars/gcCloudLogin.groovy
+              gcTerraformApply(cloud, params.ENVIRONMENT)                // vars/gcTerraformApply.groovy
+              gcDatabricksBundleDeploy(cloud, params.ENVIRONMENT)        // vars/gcDatabricksBundleDeploy.groovy
+              gcSyncOrchestration(cloud, params.ENVIRONMENT)             // vars/gcSyncOrchestration.groovy
+            }
+          }
+          parallel deployments
+        }
+      }
+    }
+
+    stage('Smoke') {
+      agent { docker { label 'linux && docker'; image 'python:3.11-slim' } }
+      steps {
+        withEnv(["ENVIRONMENT=${params.ENVIRONMENT}"]) {
+          sh 'pip install -q -r requirements/dev.txt -e . && pytest tests/integration -m smoke -v'
+        }
+      }
+    }
+  }
+
+  post {
+    success { gcNotify("SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER} -> ${params.ENVIRONMENT}/${params.CLOUD}") }
+    failure { gcNotify("FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} -> ${params.ENVIRONMENT}/${params.CLOUD}") }
+    always  { cleanWs() }
+  }
+}

@@ -1,0 +1,32 @@
+cloud: gcp
+storage:
+  protocol: gs
+  bucket_pattern: "{project}-{env}-{layer}"
+streaming:
+  broker: pubsub                       # Pub/Sub (native) + Pub/Sub Lite for Kafka-style retention
+  kafka_bootstrap: ""                  # populated by Terraform when Confluent/Kafka Connect is used
+  topics:
+    purchase_events: gc-purchase-events
+    cdc_orders: gc-cdc-orders
+    cdc_subscriptions: gc-cdc-subscriptions
+warehouse:
+  engine: bigquery
+  dataset: gaming_commerce
+compute:
+  databricks_host_secret: databricks-host-gcp
+  node_type: n2-standard-8
+  gpu_node_type: a2-highgpu-1g         # NVIDIA A100 40GB
+orchestration:
+  airflow: composer
+  composer_env: gc-composer
+ai:
+  llm_provider: vertex
+  llm_model: gemini-2.0-flash
+  embedding_model: text-embedding-005
+  vector_store: vertex_vector_search
+  model_registry: vertex_ai
+secrets:
+  backend: secret_manager
+beam:
+  runner: DataflowRunner
+  region: us-central1

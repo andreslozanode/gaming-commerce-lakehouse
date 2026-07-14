@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements/base.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/base.txt uvicorn[standard] fastapi
+COPY src ./src
+COPY conf ./conf
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir -e . && useradd -m -u 10001 api && chown -R api /app
+USER api
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request;urllib.request.urlopen('http://localhost:8080/health')"
+CMD ["uvicorn", "gaming_lakehouse.delivery.serving_api:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]

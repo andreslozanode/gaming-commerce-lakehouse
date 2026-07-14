@@ -1,0 +1,33 @@
+cloud: azure
+storage:
+  protocol: abfss
+  bucket_pattern: "{project}{env}{layer}"   # ADLS Gen2 container
+  account_pattern: "{project}{env}dls"
+streaming:
+  broker: eventhubs                          # Kafka-compatible endpoint
+  kafka_bootstrap: "{namespace}.servicebus.windows.net:9093"
+  topics:
+    purchase_events: gc-purchase-events
+    cdc_orders: gc-cdc-orders
+    cdc_subscriptions: gc-cdc-subscriptions
+warehouse:
+  engine: synapse                            # Synapse Serverless SQL / Fabric
+  dataset: gaming_commerce
+compute:
+  databricks_host_secret: databricks-host-azure
+  node_type: Standard_D8ds_v5
+  gpu_node_type: Standard_NC24ads_A100_v4    # NVIDIA A100 80GB
+orchestration:
+  airflow: aks_airflow                       # self-managed Airflow on AKS (Helm)
+  release_name: gc-airflow
+ai:
+  llm_provider: azure_openai
+  llm_model: gpt-4o-mini
+  embedding_model: text-embedding-3-large
+  vector_store: azure_ai_search
+  model_registry: azure_ml
+secrets:
+  backend: key_vault
+beam:
+  runner: FlinkRunner                        # Beam on Flink (AKS) — Dataflow is GCP-only
+  region: eastus

@@ -1,0 +1,58 @@
+# Cloud-agnostic defaults. Overridden by conf/cloud/<CLOUD>.yaml and conf/env/<ENVIRONMENT>.yaml
+project:
+  name: gaming-commerce-lakehouse
+  owner: data-platform
+  domain: gaming_commerce
+
+layers:
+  landing: landing
+  bronze: bronze
+  silver: silver
+  gold: gold
+
+catalog:
+  name: gamingcommerce                # UC catalog prefix -> gamingcommerce_<env>
+  bronze_schema: bronze
+  silver_schema: silver
+  gold_schema: gold
+
+spark:
+  shuffle_partitions: auto            # auto => 2 x total cores, capped by env
+  aqe: true
+  aqe_skew_join: true
+  aqe_coalesce_partitions: true
+  dynamic_partition_pruning: true
+  autoBroadcastJoinThreshold_mb: 64
+  delta:
+    auto_optimize: true
+    auto_compact: true
+    deletion_vectors: true
+    change_data_feed: true
+    clustering: liquid                # liquid | zorder
+  streaming:
+    trigger_interval: "30 seconds"
+    max_files_per_trigger: 256
+    max_bytes_per_trigger: "512m"
+    state_store: rocksdb
+    watermark_delay: "15 minutes"
+
+quality:
+  on_violation: warn                  # warn | drop | fail (overridden per env)
+  freshness_sla_minutes: 60
+
+ml:
+  experiment: /Shared/gaming_commerce
+  torch:
+    precision: bf16                   # fp32 | fp16 | bf16
+    compile: true
+    channels_last: false
+    ddp: true
+    batch_size: 4096
+    num_workers: 8
+    prefetch_factor: 4
+    tf32: true
+  tensorflow:
+    mixed_precision: mixed_float16
+    xla: true
+    batch_size: 512
+    autotune: true

@@ -1,0 +1,20 @@
+environment: qa
+spark:
+  shuffle_partitions: 200
+  max_executors: 8
+quality:
+  on_violation: drop
+ml:
+  torch:
+    max_epochs: 10
+  tensorflow:
+    max_epochs: 10
+streaming:
+  enabled: true
+  trigger_interval: "30 seconds"
+retention:
+  vacuum_hours: 168
+cost:
+  spot_instances: true
+  autoscale_min: 2
+  autoscale_max: 8

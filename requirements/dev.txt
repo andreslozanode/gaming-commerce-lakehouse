@@ -1,0 +1,14 @@
+-r base.txt
+pytest==8.3.4
+pytest-cov==6.0.0
+pytest-xdist==3.6.1
+chispa==0.10.1
+ruff==0.8.2
+mypy==1.13.0
+types-PyYAML==6.0.12.20240917
+bandit==1.8.0
+pip-audit==2.7.3
+pre-commit==4.0.1
+build==1.2.2
+sqlfluff==3.2.5
+apache-airflow==2.10.3

@@ -1,0 +1,86 @@
+resources:
+  jobs:
+    gc_batch_medallion:
+      name: gc_batch_medallion_${var.environment}
+      tags:
+        env: ${var.environment}
+        cloud: ${var.cloud}
+      schedule:
+        quartz_cron_expression: "0 0 4 * * ?"
+        timezone_id: UTC
+        pause_status: ${var.schedule_pause_status}
+      email_notifications:
+        on_failure: [data-platform@example.com]
+      health:
+        rules:
+          - metric: RUN_DURATION_SECONDS
+            op: GREATER_THAN
+            value: 7200
+      max_concurrent_runs: 1
+      job_clusters:
+        - job_cluster_key: batch
+          new_cluster: ${var.batch_cluster}
+      tasks:
+        - task_key: ingest
+          job_cluster_key: batch
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: ingest
+            parameters: ["--datasets", "all"]
+        - task_key: silver
+          depends_on: [{ task_key: ingest }]
+          job_cluster_key: batch
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: bronze_to_silver
+        - task_key: gold
+          depends_on: [{ task_key: silver }]
+          job_cluster_key: batch
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: silver_to_gold
+        - task_key: features
+          depends_on: [{ task_key: gold }]
+          job_cluster_key: batch
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: features
+        - task_key: publish
+          depends_on: [{ task_key: features }]
+          job_cluster_key: batch
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: publish_marts
+        - task_key: maintenance
+          depends_on: [{ task_key: publish }]
+          job_cluster_key: batch
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: maintenance
+
+    gc_ml_training:
+      name: gc_ml_training_${var.environment}
+      schedule:
+        quartz_cron_expression: "0 0 6 ? * MON"
+        timezone_id: UTC
+        pause_status: ${var.training_pause_status}
+      job_clusters:
+        - job_cluster_key: gpu
+          new_cluster: ${var.gpu_cluster}
+      tasks:
+        - task_key: train_two_tower
+          job_cluster_key: gpu
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: train_torch
+        - task_key: train_forecaster
+          job_cluster_key: gpu
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: train_tf
+        - task_key: batch_inference
+          depends_on: [{ task_key: train_two_tower }]
+          job_cluster_key: gpu
+          python_wheel_task:
+            package_name: gaming_lakehouse
+            entry_point: batch_inference

@@ -1,0 +1,20 @@
+environment: prod
+spark:
+  shuffle_partitions: 800
+  max_executors: 32
+quality:
+  on_violation: fail
+ml:
+  torch:
+    max_epochs: 40
+  tensorflow:
+    max_epochs: 40
+streaming:
+  enabled: true
+  trigger_interval: "30 seconds"
+retention:
+  vacuum_hours: 720
+cost:
+  spot_instances: false        # on-demand drivers, spot workers only for non-critical jobs
+  autoscale_min: 4
+  autoscale_max: 32
