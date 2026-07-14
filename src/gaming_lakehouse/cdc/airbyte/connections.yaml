@@ -1,0 +1,55 @@
+# Airbyte owns *batch* CDC and third-party SaaS extraction (the long tail of connectors).
+# Debezium owns *streaming* CDC (sub-minute, WAL-level). Rationale: docs/adr/ADR-0003.
+#
+# Deployed with abctl / Helm on GKE (gcp) or AKS (azure); this file is applied by
+# `scripts/airbyte_apply.py` through the Airbyte Configuration API — no clicking in the UI.
+
+workspace: gaming-commerce-${ENVIRONMENT}
+
+sources:
+  - name: postgres_oltp
+    definition: source-postgres
+    config:
+      host: ${POSTGRES_HOST}
+      port: 5432
+      database: gaming_commerce
+      username: ${AIRBYTE_USER}
+      password: ${AIRBYTE_PASSWORD}
+      ssl_mode: { mode: require }
+      replication_method:
+        method: CDC                       # log-based, incremental
+        plugin: pgoutput
+        publication: airbyte_pub
+        replication_slot: airbyte_slot_${ENVIRONMENT}
+        initial_waiting_seconds: 300
+
+  - name: kaggle_http
+    definition: source-file
+    config:
+      dataset_name: vgchartz_sales_classic
+      format: csv
+      url: ${KAGGLE_SIGNED_URL}           # fallback path when the Kaggle API is rate-limited
+
+destinations:
+  - name: lakehouse_object_store
+    definition: destination-s3-compatible  # GCS via S3 interop / ADLS via abfss
+    config:
+      bucket: ${LANDING_BUCKET}
+      path_prefix: airbyte/
+      format:
+        format_type: Parquet
+        compression_codec: ZSTD
+
+connections:
+  - name: oltp_cdc_to_landing
+    source: postgres_oltp
+    destination: lakehouse_object_store
+    schedule: { scheduleType: cron, cronExpression: "0 */2 * * * ?" }
+    namespace_definition: destination
+    non_breaking_schema_updates_behavior: propagate_columns
+    streams:
+      - { name: orders,        sync_mode: incremental, destination_sync_mode: append_dedup, cursor_field: [updated_at], primary_key: [[order_id]] }
+      - { name: order_items,   sync_mode: incremental, destination_sync_mode: append_dedup, cursor_field: [updated_at], primary_key: [[order_item_id]] }
+      - { name: subscriptions, sync_mode: incremental, destination_sync_mode: append_dedup, cursor_field: [updated_at], primary_key: [[subscription_id]] }
+      - { name: customers,     sync_mode: incremental, destination_sync_mode: append_dedup, cursor_field: [updated_at], primary_key: [[player_id]] }
+      - { name: consoles,      sync_mode: full_refresh, destination_sync_mode: overwrite }
